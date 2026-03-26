@@ -1,0 +1,16 @@
+{
+  "name": "@openclaw/plaid-plugin",
+  "version": "2026.3.24",
+  "private": true,
+  "description": "OpenClaw Plaid plugin",
+  "type": "module",
+  "dependencies": {
+    "@sinclair/typebox": "0.34.48",
+    "plaid": "41.4.0"
+  },
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

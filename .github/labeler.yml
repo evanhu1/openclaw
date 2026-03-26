@@ -221,6 +221,10 @@
   - changed-files:
       - any-glob-to-any-file:
           - "extensions/open-prose/**"
+"extensions: plaid":
+  - changed-files:
+      - any-glob-to-any-file:
+          - "extensions/plaid/**"
 "extensions: qwen-portal-auth":
   - changed-files:
       - any-glob-to-any-file:

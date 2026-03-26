@@ -2639,6 +2639,87 @@ export const GENERATED_BUNDLED_PLUGIN_METADATA = [
     },
   },
   {
+    dirName: "plaid",
+    idHint: "plaid-plugin",
+    source: {
+      source: "./index.ts",
+      built: "index.js",
+    },
+    packageName: "@openclaw/plaid-plugin",
+    packageVersion: "2026.3.24",
+    packageDescription: "OpenClaw Plaid plugin",
+    packageManifest: {
+      extensions: ["./index.ts"],
+    },
+    manifest: {
+      id: "plaid",
+      configSchema: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          api: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              clientId: {
+                type: ["string", "object"],
+              },
+              secret: {
+                type: ["string", "object"],
+              },
+              environment: {
+                type: "string",
+                enum: ["sandbox", "development", "production"],
+              },
+              countryCodes: {
+                type: "array",
+                items: {
+                  type: "string",
+                },
+              },
+              language: {
+                type: "string",
+              },
+              daysRequested: {
+                type: "number",
+              },
+            },
+          },
+        },
+      },
+      uiHints: {
+        "api.clientId": {
+          label: "Plaid Client ID",
+          help: "Plaid API client id. Falls back to PLAID_CLIENT_ID.",
+          sensitive: true,
+          placeholder: "client-id",
+        },
+        "api.secret": {
+          label: "Plaid Secret",
+          help: "Plaid API secret. Falls back to PLAID_SECRET.",
+          sensitive: true,
+          placeholder: "secret",
+        },
+        "api.environment": {
+          label: "Plaid Environment",
+          help: "Plaid environment: sandbox, development, or production.",
+        },
+        "api.countryCodes": {
+          label: "Plaid Country Codes",
+          help: "Country codes for Plaid Link item creation.",
+        },
+        "api.language": {
+          label: "Plaid Language",
+          help: "Language passed to Plaid Link.",
+        },
+        "api.daysRequested": {
+          label: "Plaid Transaction History Days",
+          help: "Number of historical days requested when creating a new link token.",
+        },
+      },
+    },
+  },
+  {
     dirName: "qianfan",
     idHint: "qianfan",
     source: {

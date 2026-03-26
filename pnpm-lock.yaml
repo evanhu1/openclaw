@@ -553,6 +553,15 @@ importers:
 
   extensions/perplexity: {}
 
+  extensions/plaid:
+    dependencies:
+      '@sinclair/typebox':
+        specifier: 0.34.48
+        version: 0.34.48
+      plaid:
+        specifier: 41.4.0
+        version: 41.4.0
+
   extensions/qianfan: {}
 
   extensions/sglang: {}
@@ -5740,6 +5749,10 @@ packages:
   pkce-challenge@5.0.1:
     resolution: {integrity: sha512-wQ0b/W4Fr01qtpHlqSqspcj3EhBvimsdh0KlHhH8HRZnMsEa0ea2fTULOXOS9ccQr3om+GcGRk4e+isrZWV8qQ==}
     engines: {node: '>=16.20.0'}
+
+  plaid@41.4.0:
+    resolution: {integrity: sha512-Ku5W9Ufsa2+TS0/kY8jS6RFPtBUbTq1xNyod89qQt/Jy2L9q9CYAnNL0WlUGa+Y5HEGP990BxCUUS2lGMRxY3g==}
+    engines: {node: '>=10.0.0'}
 
   playwright-core@1.58.2:
     resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
@@ -12522,6 +12535,12 @@ snapshots:
       pngjs: 6.0.0
 
   pkce-challenge@5.0.1: {}
+
+  plaid@41.4.0:
+    dependencies:
+      axios: 1.13.5
+    transitivePeerDependencies:
+      - debug
 
   playwright-core@1.58.2: {}
 
