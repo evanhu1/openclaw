@@ -15,6 +15,10 @@ const runNodeConfigFiles = ["tsconfig.json", "package.json", "tsdown.config.ts"]
 export const runNodeWatchedPaths = [...runNodeSourceRoots, ...runNodeConfigFiles];
 const extensionSourceFilePattern = /\.(?:[cm]?[jt]sx?)$/;
 const extensionRestartMetadataFiles = new Set(["openclaw.plugin.json", "package.json"]);
+const RUNNER_LOCK_RETRY_MS = 100;
+const RUNNER_LOCK_STALE_MS = 5 * 60_000;
+const RUNTIME_ARTIFACT_RETRY_MS = 100;
+const RUNTIME_ARTIFACT_MAX_RETRIES = 100;
 
 const normalizePath = (filePath) => String(filePath ?? "").replaceAll("\\", "/");
 
@@ -239,6 +243,67 @@ const logRunner = (message, deps) => {
   deps.stderr.write(`[openclaw] ${message}\n`);
 };
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const runnerLockPath = (deps) => path.join(deps.distRoot, ".run-node.lock");
+
+const clearStaleRunnerLock = (deps, lockPath) => {
+  try {
+    const stat = deps.fs.statSync(lockPath);
+    if (Date.now() - stat.mtimeMs <= RUNNER_LOCK_STALE_MS) {
+      return false;
+    }
+  } catch {
+    return false;
+  }
+
+  try {
+    deps.fs.rmSync(lockPath, { force: true });
+    logRunner(`Removed stale run-node lock at ${lockPath}.`, deps);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const acquireRunnerLock = async (deps) => {
+  deps.fs.mkdirSync(deps.distRoot, { recursive: true });
+  const lockPath = runnerLockPath(deps);
+
+  for (;;) {
+    try {
+      const handle = deps.fs.openSync(lockPath, "wx");
+      deps.fs.writeFileSync(
+        handle,
+        JSON.stringify(
+          {
+            pid: process.pid,
+            startedAt: new Date().toISOString(),
+            args: deps.args,
+          },
+          null,
+          2,
+        ),
+        "utf8",
+      );
+      deps.fs.closeSync(handle);
+      return () => {
+        try {
+          deps.fs.rmSync(lockPath, { force: true });
+        } catch {
+          // Ignore cleanup failures so the command can still exit.
+        }
+      };
+    } catch (error) {
+      if (error?.code !== "EEXIST") {
+        throw error;
+      }
+      clearStaleRunnerLock(deps, lockPath);
+      await sleep(RUNNER_LOCK_RETRY_MS);
+    }
+  }
+};
+
 const runOpenClaw = async (deps) => {
   const nodeProcess = deps.spawn(deps.execPath, ["openclaw.mjs", ...deps.args], {
     cwd: deps.cwd,
@@ -256,17 +321,26 @@ const runOpenClaw = async (deps) => {
   return res.exitCode ?? 1;
 };
 
-const syncRuntimeArtifacts = (deps) => {
-  try {
-    runRuntimePostBuild({ cwd: deps.cwd });
-  } catch (error) {
-    logRunner(
-      `Failed to write runtime build artifacts: ${error?.message ?? "unknown error"}`,
-      deps,
-    );
-    return false;
+const isRetryableRuntimeArtifactError = (error) =>
+  ["ENOENT", "EBUSY", "ENOTEMPTY"].includes(error?.code ?? "");
+
+const syncRuntimeArtifacts = async (deps) => {
+  for (let attempt = 0; attempt <= RUNTIME_ARTIFACT_MAX_RETRIES; attempt += 1) {
+    try {
+      runRuntimePostBuild({ cwd: deps.cwd });
+      return true;
+    } catch (error) {
+      if (!isRetryableRuntimeArtifactError(error) || attempt === RUNTIME_ARTIFACT_MAX_RETRIES) {
+        logRunner(
+          `Failed to write runtime build artifacts: ${error?.message ?? "unknown error"}`,
+          deps,
+        );
+        return false;
+      }
+      await sleep(RUNTIME_ARTIFACT_RETRY_MS);
+    }
   }
-  return true;
+  return false;
 };
 
 const writeBuildStamp = (deps) => {
@@ -302,36 +376,40 @@ export async function runNodeMain(params = {}) {
     path: path.join(deps.cwd, sourceRoot),
   }));
   deps.configFiles = runNodeConfigFiles.map((filePath) => path.join(deps.cwd, filePath));
+  const releaseRunnerLock = await acquireRunnerLock(deps);
+  try {
+    if (!shouldBuild(deps)) {
+      if (!(await syncRuntimeArtifacts(deps))) {
+        return 1;
+      }
+    } else {
+      logRunner("Building TypeScript (dist is stale).", deps);
+      const buildCmd = deps.execPath;
+      const buildArgs = compilerArgs;
+      const build = deps.spawn(buildCmd, buildArgs, {
+        cwd: deps.cwd,
+        env: deps.env,
+        stdio: "inherit",
+      });
 
-  if (!shouldBuild(deps)) {
-    if (!syncRuntimeArtifacts(deps)) {
-      return 1;
+      const buildRes = await new Promise((resolve) => {
+        build.on("exit", (exitCode, exitSignal) => resolve({ exitCode, exitSignal }));
+      });
+      if (buildRes.exitSignal) {
+        return 1;
+      }
+      if (buildRes.exitCode !== 0 && buildRes.exitCode !== null) {
+        return buildRes.exitCode;
+      }
+      if (!(await syncRuntimeArtifacts(deps))) {
+        return 1;
+      }
+      writeBuildStamp(deps);
     }
-    return await runOpenClaw(deps);
+  } finally {
+    releaseRunnerLock();
   }
 
-  logRunner("Building TypeScript (dist is stale).", deps);
-  const buildCmd = deps.execPath;
-  const buildArgs = compilerArgs;
-  const build = deps.spawn(buildCmd, buildArgs, {
-    cwd: deps.cwd,
-    env: deps.env,
-    stdio: "inherit",
-  });
-
-  const buildRes = await new Promise((resolve) => {
-    build.on("exit", (exitCode, exitSignal) => resolve({ exitCode, exitSignal }));
-  });
-  if (buildRes.exitSignal) {
-    return 1;
-  }
-  if (buildRes.exitCode !== 0 && buildRes.exitCode !== null) {
-    return buildRes.exitCode;
-  }
-  if (!syncRuntimeArtifacts(deps)) {
-    return 1;
-  }
-  writeBuildStamp(deps);
   return await runOpenClaw(deps);
 }
 
